@@ -6,25 +6,30 @@ from select import select
 from sys import stdin,argv
 import re
 ID="115"
+print("Introduce yourself: ")
+nickname=stdin.readline().strip("\n")
+
 def sendMsg(msg,nwNicknames,nwSocks):
     m=re.match("^(QUIT|PM \w+ \w+|BM \w+|BAN \w+|UNBAN \w+)",msg,re.IGNORECASE)
     if m :
-        print "sending %s" % msg
         #the message is correct, sending
         mType=msg[:2].lower()
         if mType=="pm":
             msgVals=msg.split(" ")
             pmName=msgVals[1]
-            pmMsg="".join(msgVals[2:])
+            pmMsg=" ".join(msgVals[2:])
             pmIp=nwNicknames[pmName]
             for c in nwSocks:
                 if c.getpeername()[0]==pmIp:
-                    c.send("4"+ID+"\001"+"PM#"+pmName+pmMsg)
-            
-
-
-
-
+                   # msgToSend="4"+ID+"\001"+"PM#"+pmName+"#"+pmMsg
+                    msgToSend=nickname+": "+ pmMsg
+                    msgU=msgToSend.encode("utf-8")
+                    c.send(msgU)
+        elif mType=="bm":
+            bmMsg=nickname+": "+msg[3:]
+            msgToSend=bmMsg.encode("utf-8")
+            for c in nwSocks:
+                c.send(msgToSend)
 
         return True
     else:
@@ -34,15 +39,13 @@ if len(argv)>2:
     print("Usage: ./chatptp.py [ip]")
     exit(1)
 
-print("Introduce yourself: ")
-nickname=stdin.readline().strip("\n")
 
 #server side
 s=socket()
 s.setsockopt(SOL_SOCKET,SO_REUSEADDR,1)
-s.bind(('0.0.0.0', 52130))
+s.bind(('0.0.0.0', 1664))
 s.listen(150)
-print "Listening on port 52130"
+#print "Listening on port 1664"
 
 #trying to connect to the ip that was passed in agrument
 nwSocks=[]
@@ -59,7 +62,7 @@ if len(argv)==2:
         exit(1)
     c=socket()
     c.setsockopt(SOL_SOCKET,SO_REUSEADDR,1)
-    c.connect((addr,52130))
+    c.connect((addr,1664))
     nwSocks.append(c)
     #starting the communication with newly created socked
     c.send("START#"+nickname)
@@ -74,7 +77,7 @@ if len(argv)==2:
         for ipaddr in addrs_ip: #connecting to each existing host
             ec=socket()
             ec.setsockopt(SOL_SOCKET,SO_REUSEADDR,1)
-            ec.connect((ipaddr,52130))
+            ec.connect((ipaddr,1664))
             nwSocks.append(ec)
             ec.send("HELLO#"+nickname)
             respEc=ec.recv(1024)
@@ -85,20 +88,18 @@ socks=[s,stdin]+nwSocks
 
 data=""
 while True:
-    print "current network :" + "("+",".join(x.getpeername()[0] for x in nwSocks)+")"
-    print "current nicknames base:"+str(nwNicknames)
+    #print "current network :" + "("+",".join(x.getpeername()[0] for x in nwSocks)+")"
+    #print "current nicknames base:"+str(nwNicknames)
     if data == "exit":
         break
     lin, lout, lex=select(socks, [], []) 
-    print "select got %d read events" % (len(lin))
+    #print "select got %d read events" % (len(lin))
     for t in lin:
         if t==stdin:
-            print "Speak:"
             msg=stdin.readline().strip("\n")
             if not sendMsg(msg,nwNicknames,nwSocks):
                 print("Give correct msg ")
         elif t==s: #someone is connecting
-            print "Someone is connecting" 
             (c, addr)=s.accept()
             data=c.recv(1024)
             nwNicknames[data.split("#")[1]]=addr[0]
@@ -107,7 +108,7 @@ while True:
                 c.send("HELLO#"+nickname)
                 #sending the list of current ips in the network
                 ipsList="3000"+"\001"+"IPS#("+",".join(x.getpeername()[0] for x in nwSocks)+")"
-                print "sending Ips: " +ipsList
+                #print "sending Ips: " +ipsList
                 c.send(ipsList.encode('utf-8'))
             else:
                 #newly connected host already got the network ips, just greeting back.
@@ -123,11 +124,12 @@ while True:
         else: 
         #Someone is talking
             who=t.getpeername()[0]
-            print ("%s is gona do smth...") % (who,)
+            #print ("%s is gona do smth...") % (who,)
             data=t.recv(1024)
             if data:
                 #he's saying something
-                print(data)
+                msgDecoded=data.decode("utf-8")
+                print(msgDecoded)
             else:
                 #he disconnected
                 socks.remove(t)
